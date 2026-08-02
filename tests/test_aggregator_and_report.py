@@ -1,4 +1,7 @@
-from stellargate.aggregator import ToolRunResult, all_findings
+from unittest.mock import patch
+
+from stellargate.aggregator import ToolRunResult, all_findings, run_all
+from stellargate.config import Config, ToolConfig
 from stellargate.report import gate_passed, to_json, to_markdown
 from stellargate.schema import Finding
 
@@ -55,3 +58,27 @@ def test_to_markdown_shows_failed_status_and_tool_error():
     assert "schemalock CLI not found" in md
     assert "AUTH-001" in md
     assert "STELLAR-001" in md
+
+
+def test_run_all_survives_an_unexpected_adapter_exception():
+    """Regression test: a bug in one adapter (e.g. a bare KeyError, not an
+    AdapterError) must not crash the whole run — every other tool's findings
+    still belong in the report."""
+    config = Config(
+        target=".",
+        fail_on="high",
+        tools={
+            "rytscan": ToolConfig(enabled=True, options={"path": "."}),
+            "vaultsweep": ToolConfig(enabled=False, options={}),
+            "schemalock": ToolConfig(enabled=False, options={}),
+            "shieldscan": ToolConfig(enabled=False, options={}),
+        },
+    )
+    with patch("stellargate.adapters.rytscan.run", side_effect=KeyError("boom")):
+        results = run_all(config)
+
+    assert len(results) == 1
+    assert results[0].tool == "rytscan"
+    assert results[0].error is not None
+    assert "unexpected adapter error" in results[0].error
+    # crucially: run_all itself did not raise

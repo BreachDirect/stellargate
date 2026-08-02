@@ -54,8 +54,11 @@ def run(options: dict) -> list[Finding]:
         if not report_path.exists():
             raise AdapterError(f"{TOOL_NAME}: no report produced at {report_path}")
 
-        with open(report_path) as f:
-            data = json.load(f)
+        try:
+            with open(report_path) as f:
+                data = json.load(f)
+        except json.JSONDecodeError as e:
+            raise AdapterError(f"{TOOL_NAME}: report file was not valid JSON ({e})")
 
     return parse_report(data)
 
@@ -66,7 +69,12 @@ def parse_report(data: dict) -> list[Finding]:
     for check in checks:
         if check.get("passed", True):
             continue
-        check_type = check.get("check_type", check.get("type", "unknown"))
+        # Normalize case before the severity lookup — an unnormalized
+        # "Auth_Required" vs "auth_required" would silently miss the map
+        # and fall back to DEFAULT_SEVERITY, downgrading a critical
+        # auth-bypass finding to medium. Never let a formatting quirk
+        # quietly reduce a finding's severity.
+        check_type = check.get("check_type", check.get("type", "unknown")).lower()
         findings.append(
             Finding(
                 tool=TOOL_NAME,

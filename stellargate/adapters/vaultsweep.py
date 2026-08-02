@@ -26,6 +26,14 @@ def run(options: dict) -> list[Finding]:
     except subprocess.TimeoutExpired:
         raise AdapterError(f"{TOOL_NAME}: scan timed out after 180s")
 
+    # Same principle as rytscan: a crashed scan with no output must never be
+    # read as "zero findings" — that would be a false clean bill of health.
+    if result.returncode != 0 and not result.stdout.strip():
+        raise AdapterError(
+            f"{TOOL_NAME}: scan failed (exit code {result.returncode}), no output produced. "
+            f"stderr: {result.stderr.strip()[:500]}"
+        )
+
     return parse_output(result.stdout)
 
 

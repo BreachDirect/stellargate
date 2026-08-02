@@ -6,7 +6,7 @@ import json
 import sys
 
 from stellargate.aggregator import all_findings, run_all
-from stellargate.config import Config, ConfigError
+from stellargate.config import VALID_SEVERITIES, Config, ConfigError
 from stellargate.report import gate_passed, to_json, to_markdown
 
 
@@ -34,7 +34,13 @@ def _run(args: argparse.Namespace) -> int:
         print(f"Config error: {e}", file=sys.stderr)
         return 2
 
-    fail_on = args.fail_on or config.fail_on
+    fail_on = (args.fail_on or config.fail_on).lower()
+    if fail_on not in VALID_SEVERITIES:
+        print(
+            f"Invalid --fail-on '{fail_on}'; must be one of {VALID_SEVERITIES}",
+            file=sys.stderr,
+        )
+        return 2
 
     results = run_all(config)
     findings = all_findings(results)

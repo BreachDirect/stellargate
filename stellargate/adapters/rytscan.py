@@ -32,6 +32,16 @@ def run(options: dict) -> list[Finding]:
     except subprocess.TimeoutExpired:
         raise AdapterError(f"{TOOL_NAME}: scan timed out after 300s")
 
+    # IMPORTANT: a nonzero exit with no stdout means the tool failed to run
+    # (bad path, build error, crash) — that must surface as an adapter error,
+    # never as "zero findings". Silently treating a failed scan as a clean
+    # pass would defeat the purpose of a security gate.
+    if result.returncode != 0 and not result.stdout.strip():
+        raise AdapterError(
+            f"{TOOL_NAME}: scan failed (exit code {result.returncode}), no output produced. "
+            f"stderr: {result.stderr.strip()[:500]}"
+        )
+
     return parse_output(result.stdout)
 
 

@@ -33,6 +33,14 @@ def run_all(config: Config) -> list[ToolRunResult]:
             results.append(ToolRunResult(name, findings, None))
         except AdapterError as e:
             results.append(ToolRunResult(name, None, str(e)))
+        except Exception as e:
+            # An adapter bug or unforeseen tool-output shape must not take
+            # down the whole run — every other tool's findings still belong
+            # in the report. Surface this as a clearly-labeled tool error
+            # rather than crashing.
+            results.append(
+                ToolRunResult(name, None, f"unexpected adapter error: {type(e).__name__}: {e}")
+            )
     return results
 
 

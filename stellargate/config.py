@@ -34,7 +34,10 @@ class Config:
             raise ConfigError(f"Config file not found: {path}")
 
         with open(path) as f:
-            raw = yaml.safe_load(f) or {}
+            try:
+                raw = yaml.safe_load(f) or {}
+            except yaml.YAMLError as e:
+                raise ConfigError(f"Malformed YAML in {path}: {e}")
 
         target = raw.get("target", ".")
         fail_on = raw.get("fail_on", "high").lower()
