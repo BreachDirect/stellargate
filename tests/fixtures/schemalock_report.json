@@ -1,0 +1,26 @@
+{
+  "name": "Escrow API contract",
+  "checks": [
+    {
+      "name": "get_missing_escrow_is_404_not_leaked",
+      "check_type": "status",
+      "passed": false,
+      "endpoint": "GET /escrows/{id}",
+      "detail": "got 200, expected one of [404]"
+    },
+    {
+      "name": "get_missing_escrow_is_404_not_leaked",
+      "check_type": "error_envelope",
+      "passed": false,
+      "endpoint": "GET /escrows/{id}",
+      "detail": "envelope 'standard' missing required field 'code'"
+    },
+    {
+      "name": "get_missing_escrow_is_404_not_leaked",
+      "check_type": "auth_required",
+      "passed": true,
+      "endpoint": "GET /escrows/{id}",
+      "detail": "unauthenticated request correctly rejected with 401"
+    }
+  ]
+}

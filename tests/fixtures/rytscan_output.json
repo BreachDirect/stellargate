@@ -1,0 +1,18 @@
+{
+  "findings": [
+    {
+      "rule_id": "AUTH-001",
+      "severity": "high",
+      "message": "State-changing function 'withdraw' has no require_auth check",
+      "location": "src/vault.rs:42",
+      "function": "withdraw"
+    },
+    {
+      "rule_id": "EVENT-001",
+      "severity": "medium",
+      "message": "State change in 'deposit' not accompanied by env.events().publish",
+      "location": "src/vault.rs:28",
+      "function": "deposit"
+    }
+  ]
+}

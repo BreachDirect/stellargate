@@ -1,0 +1,16 @@
+{
+  "findings": [
+    {
+      "rule_id": "STELLAR-001",
+      "severity": "critical",
+      "message": "Stellar secret key found in plaintext",
+      "file": "config/.env.example:3"
+    },
+    {
+      "rule_id": "RPC-001",
+      "severity": "high",
+      "message": "RPC URL contains embedded auth token",
+      "file": "src/client.js:11"
+    }
+  ]
+}

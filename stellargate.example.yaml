@@ -1,0 +1,21 @@
+# Example StellarGate config. Copy to stellargate.yaml and adjust paths.
+
+target: .
+fail_on: high   # critical | high | medium | low
+
+tools:
+  rytscan:
+    enabled: true
+    path: ./contracts
+
+  schemalock:
+    enabled: true
+    config: ./schemalock.yaml
+    base_url: http://127.0.0.1:8000
+
+  vaultsweep:
+    enabled: true
+    path: .
+
+  shieldscan:
+    enabled: false   # Phase 2 — adapter not implemented yet
