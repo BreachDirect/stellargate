@@ -30,12 +30,24 @@ FAILURE_SEVERITY = {
 DEFAULT_SEVERITY = "medium"
 
 
-def run(options: dict) -> list[Finding]:
-    config_path = options.get("config")
-    if not config_path:
-        raise AdapterError(f"{TOOL_NAME}: 'config' option (path to schemalock.yaml) is required")
-    base_url = options.get("base_url", "http://127.0.0.1:8000")
+def _resolve_base_urls(options: dict) -> dict[str, str]:
+    """Resolve configured base URLs into an {env_label: url} mapping.
 
+    Accepts three shapes (last one wins if several are present):
+      * options["base_urls"] as a dict {"env": "url"}  -> labels are the env keys
+      * options["base_urls"] as a list of url strings   -> labels are the URLs
+      * options["base_url"] as a single url string        -> legacy, label defaults to url
+    """
+    urls = options.get("base_urls")
+    if isinstance(urls, dict):
+        return {str(label): str(url) for label, url in urls.items()}
+    if isinstance(urls, (list, tuple)):
+        return {str(url): str(url) for url in urls}
+    single = options.get("base_url")
+    return {str(single): str(single) for single in [single]}
+
+
+def _run_one(config_path: str, base_url: str) -> dict:
     with tempfile.TemporaryDirectory() as tmp:
         report_path = Path(tmp) / "schemalock-report.json"
         cmd = [
@@ -56,11 +68,31 @@ def run(options: dict) -> list[Finding]:
 
         try:
             with open(report_path) as f:
-                data = json.load(f)
+                return json.load(f)
         except json.JSONDecodeError as e:
             raise AdapterError(f"{TOOL_NAME}: report file was not valid JSON ({e})")
 
-    return parse_report(data)
+
+def run(options: dict) -> list[Finding]:
+    config_path = options.get("config")
+    if not config_path:
+        raise AdapterError(f"{TOOL_NAME}: 'config' option (path to schemalock.yaml) is required")
+
+    environments = _resolve_base_urls(options)
+
+    findings: list[Finding] = []
+    for label, url in environments.items():
+        data = _run_one(config_path, url)
+        for finding in parse_report(data):
+            # Prepend the environment label so a reviewer can tell which
+            # environment a contract check failed against, e.g.
+            # "staging: GET /escrows/{id}". The legacy single-URL path uses
+            # a URL label, keeping the finding self-describing but unchanged
+            # in shape.
+            if label:
+                finding.location = f"{label}: {finding.location}" if finding.location else label
+            findings.append(finding)
+    return findings
 
 
 def parse_report(data: dict) -> list[Finding]:
