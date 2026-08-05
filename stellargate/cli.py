@@ -14,7 +14,20 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="stellargate")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    run_parser = subparsers.add_parser("run", help="Run all configured tools")
+    run_parser = subparsers.add_parser(
+        "run",
+        help="Run all configured tools",
+        epilog=(
+            "exit codes:\n"
+            "  0  pass - every enabled tool's findings stay below the configured "
+            "'fail_on' threshold\n"
+            "  1  fail - one or more findings reach or exceed the 'fail_on' "
+            "threshold, the gate does not pass\n"
+            "  2  error - configuration or argument error (config missing or "
+            "unparsable, invalid --fail-on value, etc.)"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     run_parser.add_argument("--config", default="stellargate.yaml")
     run_parser.add_argument("--json-report", default=None, help="Write JSON report to this path")
     run_parser.add_argument("--md-report", default=None, help="Write Markdown report to this path")
