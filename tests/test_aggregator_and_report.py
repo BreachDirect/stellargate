@@ -1,5 +1,7 @@
 from unittest.mock import patch
 
+import pytest
+
 from stellargate.aggregator import ToolRunResult, all_findings, run_all
 from stellargate.config import Config, ToolConfig
 from stellargate.report import gate_passed, to_json, to_markdown
@@ -58,6 +60,45 @@ def test_to_markdown_shows_failed_status_and_tool_error():
     assert "schemalock CLI not found" in md
     assert "AUTH-001" in md
     assert "STELLAR-001" in md
+
+
+def test_to_markdown_default_grouping_is_severity():
+    results = make_results()
+    md_default = to_markdown(results, "high", False)
+    md_explicit = to_markdown(results, "high", False, group_by="severity")
+    # explicitly requesting severity must not change the default output
+    assert md_explicit == md_default
+    assert "| Severity | Tool | Rule | Location | Message |" in md_default
+
+
+def test_to_markdown_groups_by_tool():
+    results = make_results()
+    md = to_markdown(results, "high", False, group_by="tool")
+    assert "### rytscan" in md
+    assert "### vaultsweep" in md
+    # per-tool tables have no redundant Tool column
+    assert "| Severity | Tool | Rule | Location | Message |" not in md
+    assert "AUTH-001" in md
+    assert "STELLAR-001" in md
+
+
+def test_to_markdown_tool_group_skips_errored_tools_and_marks_clean():
+    results = make_results()
+    # schemalock errored -> not shown as a findings section (it is in Tool errors)
+    md = to_markdown(results, "high", False, group_by="tool")
+    assert "### schemalock" not in md
+    assert "schemalock CLI not found" in md
+    # a healthy tool with no findings is marked as clean
+    results.append(ToolRunResult("shieldscan", [], None))
+    md2 = to_markdown(results, "high", False, group_by="tool")
+    assert "### shieldscan" in md2
+    assert "No findings. Clean run." in md2
+
+
+def test_to_markdown_rejects_unknown_grouping():
+    results = make_results()
+    with pytest.raises(ValueError, match="bogus"):
+        to_markdown(results, "high", False, group_by="bogus")
 
 
 def test_run_all_survives_an_unexpected_adapter_exception():

@@ -30,7 +30,15 @@ def to_json(results: list[ToolRunResult], fail_on: str, gate_passed: bool) -> di
     }
 
 
-def to_markdown(results: list[ToolRunResult], fail_on: str, gate_passed: bool) -> str:
+def to_markdown(
+    results: list[ToolRunResult],
+    fail_on: str,
+    gate_passed: bool,
+    group_by: str = "severity",
+) -> str:
+    if group_by not in ("severity", "tool"):
+        raise ValueError(f"Invalid group_by '{group_by}'; must be 'severity' or 'tool'")
+
     findings = [f for r in results for f in r.findings]
     lines: list[str] = []
 
@@ -55,15 +63,33 @@ def to_markdown(results: list[ToolRunResult], fail_on: str, gate_passed: bool) -
             lines.append(f"- **{r.tool}**: {r.error}")
         lines.append("")
 
-    if findings:
-        lines.append("## Findings\n")
-        lines.append("| Severity | Tool | Rule | Location | Message |")
-        lines.append("|---|---|---|---|---|")
-        for f in findings:
-            loc = f.location or "—"
-            lines.append(
-                f"| {f.severity.upper()} | {f.tool} | {f.rule_id} | {loc} | {f.message} |"
-            )
+    if findings or group_by == "tool":
+        if group_by == "severity":
+            lines.append("## Findings\n")
+            lines.append("| Severity | Tool | Rule | Location | Message |")
+            lines.append("|---|---|---|---|---|")
+            for f in findings:
+                loc = f.location or "—"
+                lines.append(
+                    f"| {f.severity.upper()} | {f.tool} | {f.rule_id} | {loc} | {f.message} |"
+                )
+        else:
+            lines.append("## Findings\n")
+            for r in results:
+                if r.error:
+                    continue
+                lines.append(f"### {r.tool}\n")
+                if r.findings:
+                    lines.append("| Severity | Rule | Location | Message |")
+                    lines.append("|---|---|---|---|")
+                    for f in sorted(r.findings, key=lambda x: -x.severity_rank):
+                        loc = f.location or "—"
+                        lines.append(
+                            f"| {f.severity.upper()} | {f.rule_id} | {loc} | {f.message} |"
+                        )
+                else:
+                    lines.append("No findings. Clean run.")
+                lines.append("")
     else:
         lines.append("No findings. Clean run.")
 

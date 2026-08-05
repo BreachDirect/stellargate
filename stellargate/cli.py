@@ -19,6 +19,12 @@ def main(argv: list[str] | None = None) -> int:
     run_parser.add_argument("--json-report", default=None, help="Write JSON report to this path")
     run_parser.add_argument("--md-report", default=None, help="Write Markdown report to this path")
     run_parser.add_argument("--fail-on", default=None, help="Override fail_on threshold from config")
+    run_parser.add_argument(
+        "--group-by",
+        default="severity",
+        choices=["severity", "tool"],
+        help="Group findings by severity or by tool (default: severity)",
+    )
 
     args = parser.parse_args(argv)
 
@@ -46,7 +52,7 @@ def _run(args: argparse.Namespace) -> int:
     findings = all_findings(results)
     passed = gate_passed(findings, fail_on)
 
-    print(to_markdown(results, fail_on, passed))
+    print(to_markdown(results, fail_on, passed, args.group_by))
 
     if args.json_report:
         with open(args.json_report, "w") as f:
@@ -54,7 +60,7 @@ def _run(args: argparse.Namespace) -> int:
 
     if args.md_report:
         with open(args.md_report, "w") as f:
-            f.write(to_markdown(results, fail_on, passed))
+            f.write(to_markdown(results, fail_on, passed, args.group_by))
 
     return 0 if passed else 1
 
