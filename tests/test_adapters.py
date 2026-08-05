@@ -88,6 +88,80 @@ def test_vaultsweep_crash_with_no_output_raises_not_zero_findings():
             vaultsweep.run({"path": "."})
 
 
+_RTS_SCAN_FINDINGS = json.dumps(
+    {
+        "findings": [
+            {
+                "rule_id": "AUTH-001",
+                "severity": "high",
+                "message": "auth bypass",
+                "location": "contract.rs:42",
+            }
+        ]
+    }
+)
+
+
+def _make_contract_dir(tmp_path, content="pub fn main() {}"):
+    d = tmp_path / "contracts"
+    d.mkdir()
+    (d / "contract.rs").write_text(content)
+    return d
+
+
+def _run_in(tmp_path):
+    d = _make_contract_dir(tmp_path)
+    cache = tmp_path / "cache.json"
+    return d, rytscan.run({"path": str(d), "cache_file": str(cache)})
+
+
+def test_rytscan_second_run_reuses_cache_without_cli(tmp_path):
+    """A file unchanged since the last run must not re-invoke the CLI, and the
+    cached findings must still be returned."""
+    with patch("subprocess.run", return_value=_FakeCompletedProcess(stdout=_RTS_SCAN_FINDINGS)) as m:
+        d = _make_contract_dir(tmp_path)
+        cache = tmp_path / "cache.json"
+        opts = {"path": str(d), "cache_file": str(cache)}
+
+        first = rytscan.run(opts)
+        second = rytscan.run(opts)
+
+        assert [f.rule_id for f in first] == ["AUTH-001"]
+        assert [f.rule_id for f in second] == ["AUTH-001"]
+        assert m.call_count == 1  # only the first run hit the CLI
+
+
+def test_rytscan_changed_content_rescans(tmp_path):
+    """If a scanned file's content changes, the CLI must be called again."""
+    with patch("subprocess.run", return_value=_FakeCompletedProcess(stdout=_RTS_SCAN_FINDINGS)) as m:
+        d = _make_contract_dir(tmp_path, content="initial")
+        cache = tmp_path / "cache.json"
+        opts = {"path": str(d), "cache_file": str(cache)}
+
+        first = rytscan.run(opts)
+        assert m.call_count == 1
+
+        (d / "contract.rs").write_text("changed body foo bar")
+
+        second = rytscan.run(opts)
+        assert m.call_count == 2  # content hash changed -> rescan
+        assert [f.rule_id for f in second] == ["AUTH-001"]
+
+
+def test_rytscan_corrupted_cache_rescans(tmp_path):
+    """A corrupt cache file must be ignored and trigger a fresh scan, not crash."""
+    d = _make_contract_dir(tmp_path)
+    cache = tmp_path / "cache.json"
+    cache.write_text("{ this is not valid json")
+    opts = {"path": str(d), "cache_file": str(cache)}
+
+    with patch("subprocess.run", return_value=_FakeCompletedProcess(stdout=_RTS_SCAN_FINDINGS)) as m:
+        findings = rytscan.run(opts)
+
+    assert m.call_count == 1
+    assert [f.rule_id for f in findings] == ["AUTH-001"]
+
+
 def test_schemalock_severity_lookup_is_case_insensitive():
     """Regression test: an unexpected casing like 'Auth_Required' must still map to
     critical — never silently fall through to the medium default."""
