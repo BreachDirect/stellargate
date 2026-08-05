@@ -1,8 +1,9 @@
 from unittest.mock import patch
 
+import stellargate.cli
 from stellargate.aggregator import ToolRunResult, all_findings, run_all
 from stellargate.config import Config, ToolConfig
-from stellargate.report import gate_passed, to_json, to_markdown
+from stellargate.report import gate_passed, to_html, to_json, to_markdown
 from stellargate.schema import Finding
 
 
@@ -82,3 +83,53 @@ def test_run_all_survives_an_unexpected_adapter_exception():
     assert results[0].error is not None
     assert "unexpected adapter error" in results[0].error
     # crucially: run_all itself did not raise
+
+
+def test_to_html_contains_conclusion_headers_and_finding():
+    results = make_results()
+    html = to_html(results, "high", False)
+    assert "FAILED" in html
+    assert "Threshold: fail on" in html
+    assert "Per-tool summary" in html
+    assert "<th>Severity</th>" in html
+    assert "AUTH-001" in html
+    assert "STELLAR-001" in html
+    assert "schemalock CLI not found" in html
+
+
+def test_to_html_escapes_special_characters():
+    results = [
+        ToolRunResult(
+            "rytscan",
+            [Finding("rytscan", "AUTH-002", "low", "a <b>&'quote'</b> message", "x.yaml:1")],
+            None,
+        )
+    ]
+    html = to_html(results, "low", True)
+    assert "PASSED" in html
+    assert "<b>" not in html
+    assert "&lt;b&gt;" in html
+    assert "&amp;" in html
+    assert "</script>" not in html
+
+
+def test_cli_html_report_writes_file(tmp_path):
+    cfg = Config(target=".", fail_on="high", tools={"rytscan": ToolConfig(enabled=True, options={})})
+    results = [
+        ToolRunResult(
+            "rytscan",
+            [Finding("rytscan", "AUTH-001", "high", "no auth check", "vault.rs:42")],
+            None,
+        )
+    ]
+    out = tmp_path / "report.html"
+    with (
+        patch("stellargate.cli.Config.load", return_value=cfg),
+        patch("stellargate.cli.run_all", return_value=results),
+    ):
+        code = stellargate.cli.main(["run", "--config", "unused.yaml", "--html-report", str(out)])
+
+    assert code == 1  # high threshold, one high finding -> gate fails
+    text = out.read_text()
+    assert "<!DOCTYPE html>" in text
+    assert "AUTH-001" in text
