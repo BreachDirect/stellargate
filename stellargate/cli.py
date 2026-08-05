@@ -7,7 +7,7 @@ import sys
 
 from stellargate.aggregator import all_findings, run_all
 from stellargate.config import VALID_SEVERITIES, Config, ConfigError
-from stellargate.report import gate_passed, to_json, to_markdown
+from stellargate.report import gate_passed, to_html, to_json, to_markdown
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -18,6 +18,7 @@ def main(argv: list[str] | None = None) -> int:
     run_parser.add_argument("--config", default="stellargate.yaml")
     run_parser.add_argument("--json-report", default=None, help="Write JSON report to this path")
     run_parser.add_argument("--md-report", default=None, help="Write Markdown report to this path")
+    run_parser.add_argument("--html-report", default=None, help="Write HTML report to this path")
     run_parser.add_argument("--fail-on", default=None, help="Override fail_on threshold from config")
 
     args = parser.parse_args(argv)
@@ -55,6 +56,10 @@ def _run(args: argparse.Namespace) -> int:
     if args.md_report:
         with open(args.md_report, "w") as f:
             f.write(to_markdown(results, fail_on, passed))
+
+    if args.html_report:
+        with open(args.html_report, "w") as f:
+            f.write(to_html(results, fail_on, passed))
 
     return 0 if passed else 1
 
