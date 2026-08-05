@@ -88,6 +88,41 @@ def test_vaultsweep_crash_with_no_output_raises_not_zero_findings():
             vaultsweep.run({"path": "."})
 
 
+def test_schemalock_mixed_report_maps_all_failed_checks():
+    data = json.loads((FIXTURES / "schemalock_mixed_report.json").read_text())
+    findings = schemalock.parse_report(data)
+    # 7 checks in fixture, 4 failed (auth_required, status, error_envelope,
+    # unknown) -> only 4 findings; passed checks are skipped.
+    assert len(findings) == 4
+
+    severity_by_rule = {f.rule_id: f.severity for f in findings}
+    assert severity_by_rule == {
+        "CONTRACT-AUTH_REQUIRED": "critical",
+        "CONTRACT-STATUS": "high",
+        "CONTRACT-ERROR_ENVELOPE": "medium",
+        "CONTRACT-RATE_LIMIT": "medium",
+    }
+
+    # every failed check becomes a Finding
+    assert all(f.tool == "schemalock" for f in findings)
+    # passed checks never appear as findings
+    assert not any(f for f in findings if f.raw.get("check_type") and f.raw["passed"])
+
+
+def test_schemalock_mixed_report_only_failed_checks():
+    data = json.loads((FIXTURES / "schemalock_mixed_report.json").read_text())
+    findings = schemalock.parse_report(data)
+    failed_types = [
+        c["check_type"].lower()
+        for c in data["checks"]
+        if not c.get("passed", True)
+    ]
+    assert {f.rule_id for f in findings} == {
+        f"CONTRACT-{t.upper()}" for t in failed_types
+    }
+    assert all(not f.raw.get("passed", False) for f in findings)
+
+
 def test_schemalock_severity_lookup_is_case_insensitive():
     """Regression test: an unexpected casing like 'Auth_Required' must still map to
     critical — never silently fall through to the medium default."""
