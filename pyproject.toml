@@ -10,7 +10,12 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",
+    "pytest-cov>=4.0",
 ]
+
+[tool.coverage.run]
+source = ["stellargate"]
+omit = ["tests/*", "*/tests/*"]
 
 [project.scripts]
 stellargate = "stellargate.cli:main"
