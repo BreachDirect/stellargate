@@ -30,6 +30,66 @@ def to_json(results: list[ToolRunResult], fail_on: str, gate_passed: bool) -> di
     }
 
 
+SEVERITY_TO_LEVEL = {
+    "critical": "error",
+    "high": "error",
+    "medium": "warning",
+    "low": "note",
+}
+
+
+def to_sarif(results: list[ToolRunResult], fail_on: str, gate_passed: bool) -> dict:
+    findings = [f for r in results for f in r.findings]
+
+    rules = {}
+    for f in findings:
+        if f.rule_id in rules:
+            continue
+        rules[f.rule_id] = {
+            "id": f.rule_id,
+            "name": f.rule_id,
+            "shortDescription": {
+                "text": f"{f.tool}: {f.message}",
+            },
+        }
+
+    sarif_results = []
+    for f in findings:
+        result = {
+            "ruleId": f.rule_id,
+            "level": SEVERITY_TO_LEVEL[f.severity],
+            "message": {"text": f.message},
+        }
+        if f.location:
+            result["locations"] = [
+                {
+                    "physicalLocation": {
+                        "artifactLocation": {"uri": f.location},
+                    }
+                }
+            ]
+        sarif_results.append(result)
+
+    run = {
+        "tool": {
+            "driver": {
+                "name": "stellargate",
+                "version": "0.1.0",
+                "informationUri": "https://github.com/BreachDirect/stellargate",
+            }
+        },
+        "results": sarif_results,
+    }
+    if rules:
+        run["tool"]["driver"]["rules"] = list(rules.values())
+
+    return {
+        "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+        "version": "2.1.0",
+        "runs": [run],
+    }
+
+
 def to_markdown(results: list[ToolRunResult], fail_on: str, gate_passed: bool) -> str:
     findings = [f for r in results for f in r.findings]
     lines: list[str] = []

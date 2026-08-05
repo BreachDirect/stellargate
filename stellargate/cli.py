@@ -7,7 +7,7 @@ import sys
 
 from stellargate.aggregator import all_findings, run_all
 from stellargate.config import VALID_SEVERITIES, Config, ConfigError
-from stellargate.report import gate_passed, to_json, to_markdown
+from stellargate.report import gate_passed, to_json, to_markdown, to_sarif
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -17,6 +17,7 @@ def main(argv: list[str] | None = None) -> int:
     run_parser = subparsers.add_parser("run", help="Run all configured tools")
     run_parser.add_argument("--config", default="stellargate.yaml")
     run_parser.add_argument("--json-report", default=None, help="Write JSON report to this path")
+    run_parser.add_argument("--sarif-report", default=None, help="Write SARIF report to this path")
     run_parser.add_argument("--md-report", default=None, help="Write Markdown report to this path")
     run_parser.add_argument("--fail-on", default=None, help="Override fail_on threshold from config")
 
@@ -51,6 +52,10 @@ def _run(args: argparse.Namespace) -> int:
     if args.json_report:
         with open(args.json_report, "w") as f:
             json.dump(to_json(results, fail_on, passed), f, indent=2)
+
+    if args.sarif_report:
+        with open(args.sarif_report, "w") as f:
+            json.dump(to_sarif(results, fail_on, passed), f, indent=2)
 
     if args.md_report:
         with open(args.md_report, "w") as f:
