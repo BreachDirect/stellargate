@@ -9,6 +9,7 @@ vulnerability-scanner sense — we only surface FAILED checks as Findings,
 since a passing contract check isn't something a reviewer needs to see in
 a compliance report.
 """
+
 from __future__ import annotations
 
 import json
@@ -23,9 +24,9 @@ TOOL_NAME = "schemalock"
 # SchemaLock doesn't emit its own severity per check; we map by failure
 # type since an auth-bypass is categorically worse than a status-code drift.
 FAILURE_SEVERITY = {
-    "auth_required": "critical",   # silent auth bypass
-    "error_envelope": "medium",    # response shape drift
-    "status": "high",              # wrong status code (e.g. leaks existence)
+    "auth_required": "critical",  # silent auth bypass
+    "error_envelope": "medium",  # response shape drift
+    "status": "high",  # wrong status code (e.g. leaks existence)
 }
 DEFAULT_SEVERITY = "medium"
 
@@ -39,13 +40,17 @@ def run(options: dict) -> list[Finding]:
     with tempfile.TemporaryDirectory() as tmp:
         report_path = Path(tmp) / "schemalock-report.json"
         cmd = [
-            "schemalock", "test",
-            "--config", config_path,
-            "--base-url", base_url,
-            "--json-report", str(report_path),
+            "schemalock",
+            "test",
+            "--config",
+            config_path,
+            "--base-url",
+            base_url,
+            "--json-report",
+            str(report_path),
         ]
         try:
-            subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            subprocess.run(cmd, capture_output=True, text=True, timeout=120, check=False)
         except FileNotFoundError as e:
             raise AdapterError(f"{TOOL_NAME}: 'schemalock' CLI not found ({e})")
         except subprocess.TimeoutExpired:

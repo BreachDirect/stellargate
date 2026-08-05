@@ -6,6 +6,7 @@ Invocation: vaultsweep scan <path> --format json --fail-on <level>
 Rule IDs (STELLAR-001, MNEMONIC-001, API-00x, DEFAULT-001, RPC-001) are
 already well-namespaced and pass through unchanged.
 """
+
 from __future__ import annotations
 
 import json
@@ -20,7 +21,7 @@ def run(options: dict) -> list[Finding]:
     path = options.get("path", ".")
     cmd = ["vaultsweep", "scan", path, "--format", "json"]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=180, check=False)
     except FileNotFoundError as e:
         raise AdapterError(f"{TOOL_NAME}: 'vaultsweep' CLI not found ({e})")
     except subprocess.TimeoutExpired:

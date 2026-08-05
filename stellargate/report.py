@@ -1,4 +1,5 @@
 """JSON and Markdown compliance report generation."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -61,9 +62,7 @@ def to_markdown(results: list[ToolRunResult], fail_on: str, gate_passed: bool) -
         lines.append("|---|---|---|---|---|")
         for f in findings:
             loc = f.location or "—"
-            lines.append(
-                f"| {f.severity.upper()} | {f.tool} | {f.rule_id} | {loc} | {f.message} |"
-            )
+            lines.append(f"| {f.severity.upper()} | {f.tool} | {f.rule_id} | {loc} | {f.message} |")
     else:
         lines.append("No findings. Clean run.")
 

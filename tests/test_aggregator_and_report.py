@@ -47,7 +47,7 @@ def test_to_json_shape():
     assert len(report["findings"]) == 2
     tool_names = {t["tool"] for t in report["tools"]}
     assert tool_names == {"rytscan", "vaultsweep", "schemalock"}
-    errored = [t for t in report["tools"] if t["tool"] == "schemalock"][0]
+    errored = next(t for t in report["tools"] if t["tool"] == "schemalock")
     assert errored["error"] == "schemalock CLI not found"
 
 
