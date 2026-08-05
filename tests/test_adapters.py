@@ -88,6 +88,103 @@ def test_vaultsweep_crash_with_no_output_raises_not_zero_findings():
             vaultsweep.run({"path": "."})
 
 
+def test_schemalock_run_multiple_base_urls_runs_each_and_labels_findings():
+    """base_urls list -> one CLI invocation per URL, findings labelled by URL."""
+    data = {
+        "checks": [
+            {
+                "name": "get_escrow",
+                "check_type": "status",
+                "passed": False,
+                "endpoint": "GET /escrows/{id}",
+                "detail": "got 500, expected 200",
+            }
+        ]
+    }
+    calls = []
+    reports = [data, data]
+
+    def _side_effect(cmd, *args, **kwargs):
+        calls.append(cmd)
+        idx = cmd.index("--json-report")
+        Path(cmd[idx + 1]).write_text(json.dumps(reports.pop(0)))
+
+    with patch("subprocess.run", side_effect=_side_effect):
+        findings = schemalock.run(
+            {"config": "./schemalock.yaml", "base_urls": ["http://staging:9000", "http://prod:9000"]}
+        )
+
+    assert len(calls) == 2
+    assert calls[0][calls[0].index("--base-url") + 1] == "http://staging:9000"
+    assert calls[1][calls[1].index("--base-url") + 1] == "http://prod:9000"
+    assert [f.location for f in findings] == [
+        "http://staging:9000: GET /escrows/{id}",
+        "http://prod:9000: GET /escrows/{id}",
+    ]
+
+
+def test_schemalock_legacy_single_base_url_calls_once():
+    """Legacy base_url (single string) still invokes the CLI once, URL-tagged."""
+    data = {
+        "checks": [
+            {
+                "name": "get_escrow",
+                "check_type": "status",
+                "passed": False,
+                "endpoint": "GET /escrows/{id}",
+                "detail": "got 500, expected 200",
+            }
+        ]
+    }
+    calls = []
+
+    def _side_effect(cmd, *args, **kwargs):
+        calls.append(cmd)
+        idx = cmd.index("--json-report")
+        Path(cmd[idx + 1]).write_text(json.dumps(data))
+
+    with patch("subprocess.run", side_effect=_side_effect):
+        findings = schemalock.run(
+            {"config": "./schemalock.yaml", "base_url": "http://127.0.0.1:8000"}
+        )
+
+    assert len(calls) == 1
+    assert calls[0][calls[0].index("--base-url") + 1] == "http://127.0.0.1:8000"
+    assert len(findings) == 1
+
+
+def test_schemalock_base_urls_dict_uses_env_keys_as_labels():
+    data = {
+        "checks": [
+            {
+                "name": "get_escrow",
+                "check_type": "status",
+                "passed": False,
+                "endpoint": "GET /escrows/{id}",
+                "detail": "got 500, expected 200",
+            }
+        ]
+    }
+    reported = [data, data]
+
+    def _side_effect(cmd, *args, **kwargs):
+        idx = cmd.index("--json-report")
+        Path(cmd[idx + 1]).write_text(json.dumps(reported.pop(0)))
+
+    with patch("subprocess.run", side_effect=_side_effect):
+        findings = schemalock.run(
+            {
+                "config": "./schemalock.yaml",
+                "base_urls": {"staging": "http://staging:9000", "prod": "http://prod:9000"},
+            }
+        )
+
+    assert [f.location for f in findings] == [
+        "staging: GET /escrows/{id}",
+        "prod: GET /escrows/{id}",
+    ]
+
+
 def test_schemalock_severity_lookup_is_case_insensitive():
     """Regression test: an unexpected casing like 'Auth_Required' must still map to
     critical — never silently fall through to the medium default."""
