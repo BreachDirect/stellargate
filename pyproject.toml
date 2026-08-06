@@ -10,8 +10,13 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",
-    "hypothesis>=6.0",
+    "mypy>=1.10",
 ]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+check_untyped_defs = true
 
 [project.scripts]
 stellargate = "stellargate.cli:main"
