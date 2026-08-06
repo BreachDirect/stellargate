@@ -59,6 +59,50 @@ def test_vaultsweep_parse_output():
     assert findings[0].severity == "critical"
 
 
+def test_vaultsweep_ignore_paths_drops_matching_findings():
+    stdout = json.dumps(
+        {
+            "findings": [
+                {"rule_id": "STELLAR-001", "severity": "critical", "file": "tests/fixtures/keys.example:3"},
+                {"rule_id": "RPC-001", "severity": "high", "file": "src/client.js:11"},
+            ]
+        }
+    )
+    with patch("subprocess.run", return_value=_FakeCompletedProcess(stdout=stdout, returncode=0)):
+        findings = vaultsweep.run({"path": ".", "ignore_paths": ["tests/fixtures/**", "**/*.example"]})
+    assert [f.rule_id for f in findings] == ["RPC-001"]
+
+
+def test_vaultsweep_ignore_paths_keeps_non_matching_findings():
+    stdout = json.dumps(
+        {
+            "findings": [
+                {"rule_id": "STELLAR-001", "severity": "critical", "file": "src/main.py:7"},
+                {"rule_id": "RPC-001", "severity": "high", "file": "src/client.js:11"},
+            ]
+        }
+    )
+    with patch("subprocess.run", return_value=_FakeCompletedProcess(stdout=stdout, returncode=0)):
+        findings = vaultsweep.run({"path": ".", "ignore_paths": ["tests/fixtures/**", "**/*.example"]})
+    assert [f.rule_id for f in findings] == ["STELLAR-001", "RPC-001"]
+
+
+def test_vaultsweep_ignore_paths_absent_or_empty_keeps_everything():
+    raw = (FIXTURES / "vaultsweep_output.json").read_text()
+    for options in ({"path": "."}, {"path": ".", "ignore_paths": []}):
+        with patch("subprocess.run", return_value=_FakeCompletedProcess(stdout=raw, returncode=0)):
+            findings = vaultsweep.run(options)
+        assert len(findings) == 2
+        assert findings == vaultsweep.parse_output(raw)
+
+
+def test_vaultsweep_ignore_paths_matches_raw_line_suffixed_location():
+    # "**/*.example" must match "config/.env.example:3" once the ":line"
+    # suffix is stripped, even though the raw location is not a plain path.
+    assert vaultsweep._is_ignored("config/.env.example:3", ["**/*.example"])
+    assert not vaultsweep._is_ignored("src/client.js:11", ["**/*.example"])
+
+
 class _FakeCompletedProcess:
     def __init__(self, stdout="", returncode=0, stderr=""):
         self.stdout = stdout
