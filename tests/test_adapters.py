@@ -59,6 +59,50 @@ def test_vaultsweep_parse_output():
     assert findings[0].severity == "critical"
 
 
+def test_vaultsweep_ignore_paths_drops_matching_findings():
+    stdout = json.dumps(
+        {
+            "findings": [
+                {"rule_id": "STELLAR-001", "severity": "critical", "file": "tests/fixtures/keys.example:3"},
+                {"rule_id": "RPC-001", "severity": "high", "file": "src/client.js:11"},
+            ]
+        }
+    )
+    with patch("subprocess.run", return_value=_FakeCompletedProcess(stdout=stdout, returncode=0)):
+        findings = vaultsweep.run({"path": ".", "ignore_paths": ["tests/fixtures/**", "**/*.example"]})
+    assert [f.rule_id for f in findings] == ["RPC-001"]
+
+
+def test_vaultsweep_ignore_paths_keeps_non_matching_findings():
+    stdout = json.dumps(
+        {
+            "findings": [
+                {"rule_id": "STELLAR-001", "severity": "critical", "file": "src/main.py:7"},
+                {"rule_id": "RPC-001", "severity": "high", "file": "src/client.js:11"},
+            ]
+        }
+    )
+    with patch("subprocess.run", return_value=_FakeCompletedProcess(stdout=stdout, returncode=0)):
+        findings = vaultsweep.run({"path": ".", "ignore_paths": ["tests/fixtures/**", "**/*.example"]})
+    assert [f.rule_id for f in findings] == ["STELLAR-001", "RPC-001"]
+
+
+def test_vaultsweep_ignore_paths_absent_or_empty_keeps_everything():
+    raw = (FIXTURES / "vaultsweep_output.json").read_text()
+    for options in ({"path": "."}, {"path": ".", "ignore_paths": []}):
+        with patch("subprocess.run", return_value=_FakeCompletedProcess(stdout=raw, returncode=0)):
+            findings = vaultsweep.run(options)
+        assert len(findings) == 2
+        assert findings == vaultsweep.parse_output(raw)
+
+
+def test_vaultsweep_ignore_paths_matches_raw_line_suffixed_location():
+    # "**/*.example" must match "config/.env.example:3" once the ":line"
+    # suffix is stripped, even though the raw location is not a plain path.
+    assert vaultsweep._is_ignored("config/.env.example:3", ["**/*.example"])
+    assert not vaultsweep._is_ignored("src/client.js:11", ["**/*.example"])
+
+
 class _FakeCompletedProcess:
     def __init__(self, stdout="", returncode=0, stderr=""):
         self.stdout = stdout
@@ -86,6 +130,41 @@ def test_vaultsweep_crash_with_no_output_raises_not_zero_findings():
     with patch("subprocess.run", return_value=_FakeCompletedProcess(stdout="", returncode=2, stderr="permission denied")):
         with pytest.raises(AdapterError, match="scan failed"):
             vaultsweep.run({"path": "."})
+
+
+def test_schemalock_mixed_report_maps_all_failed_checks():
+    data = json.loads((FIXTURES / "schemalock_mixed_report.json").read_text())
+    findings = schemalock.parse_report(data)
+    # 7 checks in fixture, 4 failed (auth_required, status, error_envelope,
+    # unknown) -> only 4 findings; passed checks are skipped.
+    assert len(findings) == 4
+
+    severity_by_rule = {f.rule_id: f.severity for f in findings}
+    assert severity_by_rule == {
+        "CONTRACT-AUTH_REQUIRED": "critical",
+        "CONTRACT-STATUS": "high",
+        "CONTRACT-ERROR_ENVELOPE": "medium",
+        "CONTRACT-RATE_LIMIT": "medium",
+    }
+
+    # every failed check becomes a Finding
+    assert all(f.tool == "schemalock" for f in findings)
+    # passed checks never appear as findings
+    assert not any(f for f in findings if f.raw.get("check_type") and f.raw["passed"])
+
+
+def test_schemalock_mixed_report_only_failed_checks():
+    data = json.loads((FIXTURES / "schemalock_mixed_report.json").read_text())
+    findings = schemalock.parse_report(data)
+    failed_types = [
+        c["check_type"].lower()
+        for c in data["checks"]
+        if not c.get("passed", True)
+    ]
+    assert {f.rule_id for f in findings} == {
+        f"CONTRACT-{t.upper()}" for t in failed_types
+    }
+    assert all(not f.raw.get("passed", False) for f in findings)
 
 
 def test_schemalock_severity_lookup_is_case_insensitive():

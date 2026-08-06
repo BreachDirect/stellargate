@@ -1,9 +1,12 @@
 from unittest.mock import patch
 
+from hypothesis import given, settings
+from hypothesis import strategies as st
+
 from stellargate.aggregator import ToolRunResult, all_findings, run_all
 from stellargate.config import Config, ToolConfig
 from stellargate.report import gate_passed, to_json, to_markdown
-from stellargate.schema import Finding
+from stellargate.schema import SEVERITY_ORDER, Finding
 
 
 def make_results():
@@ -82,3 +85,36 @@ def test_run_all_survives_an_unexpected_adapter_exception():
     assert results[0].error is not None
     assert "unexpected adapter error" in results[0].error
     # crucially: run_all itself did not raise
+
+
+SEVERITIES = ["critical", "high", "medium", "low"]
+TOOLS = ["rytscan", "schemalock", "vaultsweep", "shieldscan"]
+
+
+@given(
+    st.lists(
+        st.builds(
+            Finding,
+            tool=st.sampled_from(TOOLS),
+            rule_id=st.text(min_size=1),
+            severity=st.sampled_from(SEVERITIES),
+            message=st.text(),
+        )
+    )
+)
+@settings(max_examples=100)
+def test_all_findings_sorts_strictly_by_severity_rank_desc(findings):
+    """Property test: all_findings() must sort strictly by severity_rank
+    descending regardless of input order, mix, or duplicates."""
+    results = [ToolRunResult(f.tool, [f], None) for f in findings]
+    if not findings:
+        assert all_findings(results) == []
+        return
+
+    output = all_findings(results)
+
+    assert len(output) == len(findings)
+    for f in output:
+        assert f.severity_rank == SEVERITY_ORDER[f.severity]
+    ranks = [f.severity_rank for f in output]
+    assert ranks == sorted(ranks, reverse=True)
