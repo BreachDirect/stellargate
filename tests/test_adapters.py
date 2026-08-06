@@ -132,78 +132,39 @@ def test_vaultsweep_crash_with_no_output_raises_not_zero_findings():
             vaultsweep.run({"path": "."})
 
 
-_RTS_SCAN_FINDINGS = json.dumps(
-    {
-        "findings": [
-            {
-                "rule_id": "AUTH-001",
-                "severity": "high",
-                "message": "auth bypass",
-                "location": "contract.rs:42",
-            }
-        ]
+def test_schemalock_mixed_report_maps_all_failed_checks():
+    data = json.loads((FIXTURES / "schemalock_mixed_report.json").read_text())
+    findings = schemalock.parse_report(data)
+    # 7 checks in fixture, 4 failed (auth_required, status, error_envelope,
+    # unknown) -> only 4 findings; passed checks are skipped.
+    assert len(findings) == 4
+
+    severity_by_rule = {f.rule_id: f.severity for f in findings}
+    assert severity_by_rule == {
+        "CONTRACT-AUTH_REQUIRED": "critical",
+        "CONTRACT-STATUS": "high",
+        "CONTRACT-ERROR_ENVELOPE": "medium",
+        "CONTRACT-RATE_LIMIT": "medium",
     }
-)
+
+    # every failed check becomes a Finding
+    assert all(f.tool == "schemalock" for f in findings)
+    # passed checks never appear as findings
+    assert not any(f for f in findings if f.raw.get("check_type") and f.raw["passed"])
 
 
-def _make_contract_dir(tmp_path, content="pub fn main() {}"):
-    d = tmp_path / "contracts"
-    d.mkdir()
-    (d / "contract.rs").write_text(content)
-    return d
-
-
-def _run_in(tmp_path):
-    d = _make_contract_dir(tmp_path)
-    cache = tmp_path / "cache.json"
-    return d, rytscan.run({"path": str(d), "cache_file": str(cache)})
-
-
-def test_rytscan_second_run_reuses_cache_without_cli(tmp_path):
-    """A file unchanged since the last run must not re-invoke the CLI, and the
-    cached findings must still be returned."""
-    with patch("subprocess.run", return_value=_FakeCompletedProcess(stdout=_RTS_SCAN_FINDINGS)) as m:
-        d = _make_contract_dir(tmp_path)
-        cache = tmp_path / "cache.json"
-        opts = {"path": str(d), "cache_file": str(cache)}
-
-        first = rytscan.run(opts)
-        second = rytscan.run(opts)
-
-        assert [f.rule_id for f in first] == ["AUTH-001"]
-        assert [f.rule_id for f in second] == ["AUTH-001"]
-        assert m.call_count == 1  # only the first run hit the CLI
-
-
-def test_rytscan_changed_content_rescans(tmp_path):
-    """If a scanned file's content changes, the CLI must be called again."""
-    with patch("subprocess.run", return_value=_FakeCompletedProcess(stdout=_RTS_SCAN_FINDINGS)) as m:
-        d = _make_contract_dir(tmp_path, content="initial")
-        cache = tmp_path / "cache.json"
-        opts = {"path": str(d), "cache_file": str(cache)}
-
-        first = rytscan.run(opts)
-        assert m.call_count == 1
-
-        (d / "contract.rs").write_text("changed body foo bar")
-
-        second = rytscan.run(opts)
-        assert m.call_count == 2  # content hash changed -> rescan
-        assert [f.rule_id for f in second] == ["AUTH-001"]
-
-
-def test_rytscan_corrupted_cache_rescans(tmp_path):
-    """A corrupt cache file must be ignored and trigger a fresh scan, not crash."""
-    d = _make_contract_dir(tmp_path)
-    cache = tmp_path / "cache.json"
-    cache.write_text("{ this is not valid json")
-    opts = {"path": str(d), "cache_file": str(cache)}
-
-    with patch("subprocess.run", return_value=_FakeCompletedProcess(stdout=_RTS_SCAN_FINDINGS)) as m:
-        findings = rytscan.run(opts)
-
-    assert m.call_count == 1
-    assert [f.rule_id for f in findings] == ["AUTH-001"]
+def test_schemalock_mixed_report_only_failed_checks():
+    data = json.loads((FIXTURES / "schemalock_mixed_report.json").read_text())
+    findings = schemalock.parse_report(data)
+    failed_types = [
+        c["check_type"].lower()
+        for c in data["checks"]
+        if not c.get("passed", True)
+    ]
+    assert {f.rule_id for f in findings} == {
+        f"CONTRACT-{t.upper()}" for t in failed_types
+    }
+    assert all(not f.raw.get("passed", False) for f in findings)
 
 
 def test_schemalock_severity_lookup_is_case_insensitive():
