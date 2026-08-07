@@ -16,6 +16,9 @@ tools:
   vaultsweep:
     enabled: true
     path: .
+    # Optional: glob patterns (fnmatch) for known-false-positive paths to
+    # exclude from the scan, e.g. test fixtures with intentionally fake
+    # secrets. Example: ignore_paths: ["tests/fixtures/**", "**/*.example"]
 
   shieldscan:
     enabled: false   # Phase 2 — adapter not implemented yet
