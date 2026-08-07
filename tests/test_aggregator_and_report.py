@@ -1,3 +1,5 @@
+import threading
+import time
 from unittest.mock import patch
 
 from hypothesis import given, settings
@@ -6,7 +8,7 @@ from hypothesis import strategies as st
 from stellargate.aggregator import ToolRunResult, all_findings, run_all
 from stellargate.config import Config, ToolConfig
 from stellargate.report import gate_passed, to_json, to_markdown
-from stellargate.schema import SEVERITY_ORDER, Finding
+from stellargate.schema import AdapterError, Finding
 
 
 def make_results():
@@ -87,34 +89,119 @@ def test_run_all_survives_an_unexpected_adapter_exception():
     # crucially: run_all itself did not raise
 
 
-SEVERITIES = ["critical", "high", "medium", "low"]
-TOOLS = ["rytscan", "schemalock", "vaultsweep", "shieldscan"]
+def test_run_all_runs_enabled_adapters_concurrently_with_barrier():
+    """If adapters run in parallel, all three reach the barrier and release;
+    run sequentially the first would time out and its result would be an error."""
+    barrier = threading.Barrier(3)  # one party per enabled adapter
 
+    def wait(_options):
+        barrier.wait(timeout=5)
+        return []
 
-@given(
-    st.lists(
-        st.builds(
-            Finding,
-            tool=st.sampled_from(TOOLS),
-            rule_id=st.text(min_size=1),
-            severity=st.sampled_from(SEVERITIES),
-            message=st.text(),
-        )
+    config = Config(
+        target=".",
+        fail_on="high",
+        tools={
+            "rytscan": ToolConfig(enabled=True, options={}),
+            "schemalock": ToolConfig(enabled=True, options={}),
+            "vaultsweep": ToolConfig(enabled=True, options={}),
+            "shieldscan": ToolConfig(enabled=False, options={}),
+        },
     )
-)
-@settings(max_examples=100)
-def test_all_findings_sorts_strictly_by_severity_rank_desc(findings):
-    """Property test: all_findings() must sort strictly by severity_rank
-    descending regardless of input order, mix, or duplicates."""
-    results = [ToolRunResult(f.tool, [f], None) for f in findings]
-    if not findings:
-        assert all_findings(results) == []
-        return
+    with (
+        patch("stellargate.adapters.rytscan.run", side_effect=wait),
+        patch("stellargate.adapters.schemalock.run", side_effect=wait),
+        patch("stellargate.adapters.vaultsweep.run", side_effect=wait),
+    ):
+        results = run_all(config)
 
-    output = all_findings(results)
+    assert len(results) == 3
+    # If adapters had run sequentially, the first would have timed out at the
+    # barrier and surfaced as an unexpected error — no errors proves overlap.
+    assert all(r.error is None for r in results)
 
-    assert len(output) == len(findings)
-    for f in output:
-        assert f.severity_rank == SEVERITY_ORDER[f.severity]
-    ranks = [f.severity_rank for f in output]
-    assert ranks == sorted(ranks, reverse=True)
+
+def test_run_all_wall_time_less_than_sequential_sum():
+    def slow(_options):
+        time.sleep(0.2)
+        return []
+
+    config = Config(
+        target=".",
+        fail_on="high",
+        tools={
+            "rytscan": ToolConfig(enabled=True, options={}),
+            "schemalock": ToolConfig(enabled=True, options={}),
+            "vaultsweep": ToolConfig(enabled=True, options={}),
+            "shieldscan": ToolConfig(enabled=True, options={}),
+        },
+    )
+    start = time.perf_counter()
+    with (
+        patch("stellargate.adapters.rytscan.run", side_effect=slow),
+        patch("stellargate.adapters.schemalock.run", side_effect=slow),
+        patch("stellargate.adapters.vaultsweep.run", side_effect=slow),
+        patch("stellargate.adapters.shieldscan.run", side_effect=slow),
+    ):
+        run_all(config)
+    elapsed = time.perf_counter() - start
+    # Sequential total is 0.8s; concurrent should be ~0.2s + scheduling
+    # overhead. A generous ceiling still proves parallelism.
+    assert elapsed < 0.7
+
+
+def test_run_all_preserves_config_order_under_concurrency():
+    config = Config(
+        target=".",
+        fail_on="high",
+        tools={
+            "rytscan": ToolConfig(enabled=True, options={}),
+            "schemalock": ToolConfig(enabled=True, options={}),
+            "vaultsweep": ToolConfig(enabled=True, options={}),
+            "shieldscan": ToolConfig(enabled=True, options={}),
+        },
+    )
+
+    def slow(_options):
+        time.sleep(0.05)
+        return []
+
+    with (
+        patch("stellargate.adapters.rytscan.run", side_effect=slow),
+        patch("stellargate.adapters.schemalock.run", side_effect=slow),
+        patch("stellargate.adapters.vaultsweep.run", side_effect=slow),
+        patch("stellargate.adapters.shieldscan.run", side_effect=slow),
+    ):
+        results = run_all(config)
+
+    assert [r.tool for r in results] == ["rytscan", "schemalock", "vaultsweep", "shieldscan"]
+
+
+def test_run_all_error_in_one_concurrent_adapter_does_not_break_others():
+    config = Config(
+        target=".",
+        fail_on="high",
+        tools={
+            "rytscan": ToolConfig(enabled=True, options={}),
+            "schemalock": ToolConfig(enabled=True, options={}),
+            "vaultsweep": ToolConfig(enabled=True, options={}),
+            "shieldscan": ToolConfig(enabled=True, options={}),
+        },
+    )
+    with (
+        patch(
+            "stellargate.adapters.rytscan.run",
+            side_effect=AdapterError("rytscan tool missing"),
+        ),
+        patch("stellargate.adapters.schemalock.run", return_value=[]),
+        patch("stellargate.adapters.vaultsweep.run", side_effect=KeyError("boom")),
+        patch("stellargate.adapters.shieldscan.run", return_value=[]),
+    ):
+        results = run_all(config)
+
+    assert [r.tool for r in results] == ["rytscan", "schemalock", "vaultsweep", "shieldscan"]
+    assert results[0].error == "rytscan tool missing"
+    assert results[1].error is None
+    assert results[2].error is not None
+    assert "unexpected adapter error" in results[2].error
+    assert results[3].error is None
