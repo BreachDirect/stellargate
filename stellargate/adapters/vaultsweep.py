@@ -8,12 +8,31 @@ already well-namespaced and pass through unchanged.
 """
 from __future__ import annotations
 
+import fnmatch
 import json
+import re
 import subprocess
 
 from stellargate.schema import AdapterError, Finding
 
 TOOL_NAME = "vaultsweep"
+
+_FILE_LINE_RE = re.compile(r":\d+(?::\d+)?$")
+
+
+def _is_ignored(location: str | None, patterns: list[str]) -> bool:
+    if not location or not patterns:
+        return False
+    # VaultSweep locations carry a ":line" (and optionally ":col") suffix, which
+    # would break glob suffixes like "**/*.example". Strip that suffix for the
+    # path match, but keep matching the raw location too in case it has none.
+    path = _FILE_LINE_RE.sub("", location)
+    candidates = {path}
+    if path != location:
+        candidates.add(location)
+    # fnmatchcase (not fnmatch: it does no normcase, so it never silently
+    # rewrites path separators on Windows; locations are matched as-is.
+    return any(fnmatch.fnmatchcase(cand_loc, pat) for cand_loc in candidates for pat in patterns)
 
 
 def run(options: dict) -> list[Finding]:
@@ -34,7 +53,13 @@ def run(options: dict) -> list[Finding]:
             f"stderr: {result.stderr.strip()[:500]}"
         )
 
-    return parse_output(result.stdout)
+    findings = parse_output(result.stdout)
+
+    ignore_paths = options.get("ignore_paths") or []
+    if ignore_paths:
+        findings = [f for f in findings if not _is_ignored(f.location, ignore_paths)]
+
+    return findings
 
 
 def parse_output(stdout: str) -> list[Finding]:
