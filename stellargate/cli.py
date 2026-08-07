@@ -1,4 +1,5 @@
 """stellargate run --config stellargate.yaml [--json-report path] [--fail-on LEVEL]"""
+
 from __future__ import annotations
 
 import argparse
@@ -57,7 +58,9 @@ def main(argv: list[str] | None = None) -> int:
     run_parser.add_argument("--config", default="stellargate.yaml")
     run_parser.add_argument("--json-report", default=None, help="Write JSON report to this path")
     run_parser.add_argument("--md-report", default=None, help="Write Markdown report to this path")
-    run_parser.add_argument("--fail-on", default=None, help="Override fail_on threshold from config")
+    run_parser.add_argument(
+        "--fail-on", default=None, help="Override fail_on threshold from config"
+    )
 
     args = parser.parse_args(argv)
 

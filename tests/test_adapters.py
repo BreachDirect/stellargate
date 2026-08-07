@@ -113,23 +113,38 @@ class _FakeCompletedProcess:
 def test_rytscan_crash_with_no_output_raises_not_zero_findings():
     """Regression test: a tool that crashes (nonzero exit, empty stdout) must
     raise AdapterError, never be silently read as a clean 'zero findings' scan."""
-    with patch("subprocess.run", return_value=_FakeCompletedProcess(stdout="", returncode=1, stderr="panic: build failed")):
-        with pytest.raises(AdapterError, match="scan failed"):
-            rytscan.run({"path": "./contracts"})
+    with (
+        patch(
+            "subprocess.run",
+            return_value=_FakeCompletedProcess(
+                stdout="", returncode=1, stderr="panic: build failed"
+            ),
+        ),
+        pytest.raises(AdapterError, match="scan failed"),
+    ):
+        rytscan.run({"path": "./contracts"})
 
 
 def test_rytscan_clean_pass_with_zero_findings_is_fine():
     """A genuine clean scan (exit 0, empty JSON findings list) is a legitimate pass —
     only a crash (nonzero exit + empty stdout) should raise."""
-    with patch("subprocess.run", return_value=_FakeCompletedProcess(stdout='{"findings": []}', returncode=0)):
+    with patch(
+        "subprocess.run",
+        return_value=_FakeCompletedProcess(stdout='{"findings": []}', returncode=0),
+    ):
         findings = rytscan.run({"path": "./contracts"})
         assert findings == []
 
 
 def test_vaultsweep_crash_with_no_output_raises_not_zero_findings():
-    with patch("subprocess.run", return_value=_FakeCompletedProcess(stdout="", returncode=2, stderr="permission denied")):
-        with pytest.raises(AdapterError, match="scan failed"):
-            vaultsweep.run({"path": "."})
+    with (
+        patch(
+            "subprocess.run",
+            return_value=_FakeCompletedProcess(stdout="", returncode=2, stderr="permission denied"),
+        ),
+        pytest.raises(AdapterError, match="scan failed"),
+    ):
+        vaultsweep.run({"path": "."})
 
 
 def test_schemalock_mixed_report_maps_all_failed_checks():
