@@ -14,11 +14,17 @@ from __future__ import annotations
 import json
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 from stellargate.schema import AdapterError, Finding
 
 TOOL_NAME = "schemalock"
+
+# Target server may still be warming up (e.g. connection-refused on the very
+# first contract probe). Give it one short grace window before giving up.
+RETRY_DELAY_SECONDS = 5
+SCHEMALOCK_TIMEOUT_SECONDS = 120
 
 # SchemaLock doesn't emit its own severity per check; we map by failure
 # type since an auth-bypass is categorically worse than a status-code drift.
@@ -44,15 +50,26 @@ def run(options: dict) -> list[Finding]:
             "--base-url", base_url,
             "--json-report", str(report_path),
         ]
-        try:
-            subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-        except FileNotFoundError as e:
-            raise AdapterError(f"{TOOL_NAME}: 'schemalock' CLI not found ({e})")
-        except subprocess.TimeoutExpired:
-            raise AdapterError(f"{TOOL_NAME}: test run timed out after 120s")
+        last_stderr = ""
+        for attempt in range(2):
+            try:
+                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=SCHEMALOCK_TIMEOUT_SECONDS)
+            except FileNotFoundError as e:
+                # Retrying cannot help a missing binary — fail fast.
+                raise AdapterError(f"{TOOL_NAME}: 'schemalock' CLI not found ({e})")
+            except subprocess.TimeoutExpired:
+                # Same for a hang — the report will never arrive.
+                raise AdapterError(f"{TOOL_NAME}: test run timed out after {SCHEMALOCK_TIMEOUT_SECONDS}s")
+
+            last_stderr = (proc.stderr or "").strip()
+            if proc.returncode == 0 and report_path.exists():
+                break
+            if attempt == 0:
+                time.sleep(RETRY_DELAY_SECONDS)
 
         if not report_path.exists():
-            raise AdapterError(f"{TOOL_NAME}: no report produced at {report_path}")
+            detail = f" (last run stderr: {last_stderr})" if last_stderr else ""
+            raise AdapterError(f"{TOOL_NAME}: no report produced at {report_path}{detail}")
 
         try:
             with open(report_path) as f:

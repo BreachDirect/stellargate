@@ -1,0 +1,54 @@
+{
+  "name": "Synthetic mixed contract report",
+  "checks": [
+    {
+      "name": "auth_required_denies_anonymous",
+      "check_type": "auth_required",
+      "passed": false,
+      "endpoint": "POST /widgets",
+      "detail": "unauthenticated request returned 200 (expected 401)"
+    },
+    {
+      "name": "auth_required_allows_authed",
+      "check_type": "auth_required",
+      "passed": true,
+      "endpoint": "GET /widgets/{id}",
+      "detail": "authenticated request accepted"
+    },
+    {
+      "name": "status_returns_expected_code",
+      "check_type": "status",
+      "passed": false,
+      "endpoint": "DELETE /widgets/{id}",
+      "detail": "got 200, expected 204"
+    },
+    {
+      "name": "status_returns_expected_code",
+      "check_type": "status",
+      "passed": true,
+      "endpoint": "GET /widgets",
+      "detail": "response status 200 as specified"
+    },
+    {
+      "name": "error_envelope_matches_schema",
+      "check_type": "error_envelope",
+      "passed": false,
+      "endpoint": "GET /widgets/missing",
+      "detail": "envelope 'standard' missing required field 'code'"
+    },
+    {
+      "name": "error_envelope_matches_schema",
+      "check_type": "error_envelope",
+      "passed": true,
+      "endpoint": "GET /widgets/{id}",
+      "detail": "error envelope conforms to schema"
+    },
+    {
+      "name": "mystery_check",
+      "check_type": "rate_limit",
+      "passed": false,
+      "endpoint": "POST /widgets",
+      "detail": "unknown check_type must fall back to medium severity"
+    }
+  ]
+}
