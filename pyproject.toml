@@ -14,6 +14,11 @@ dev = [
     "ruff>=0.6",
 ]
 
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+check_untyped_defs = true
+
 [project.scripts]
 stellargate = "stellargate.cli:main"
 

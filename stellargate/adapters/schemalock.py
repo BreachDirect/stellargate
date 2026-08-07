@@ -15,11 +15,17 @@ from __future__ import annotations
 import json
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 from stellargate.schema import AdapterError, Finding
 
 TOOL_NAME = "schemalock"
+
+# Target server may still be warming up (e.g. connection-refused on the very
+# first contract probe). Give it one short grace window before giving up.
+RETRY_DELAY_SECONDS = 5
+SCHEMALOCK_TIMEOUT_SECONDS = 120
 
 # SchemaLock doesn't emit its own severity per check; we map by failure
 # type since an auth-bypass is categorically worse than a status-code drift.
@@ -57,7 +63,8 @@ def run(options: dict) -> list[Finding]:
             raise AdapterError(f"{TOOL_NAME}: test run timed out after 120s")
 
         if not report_path.exists():
-            raise AdapterError(f"{TOOL_NAME}: no report produced at {report_path}")
+            detail = f" (last run stderr: {last_stderr})" if last_stderr else ""
+            raise AdapterError(f"{TOOL_NAME}: no report produced at {report_path}{detail}")
 
         try:
             with open(report_path) as f:
