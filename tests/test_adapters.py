@@ -184,3 +184,78 @@ def test_schemalock_severity_lookup_is_case_insensitive():
     findings = schemalock.parse_report(data)
     assert len(findings) == 1
     assert findings[0].severity == "critical"
+
+
+def _json_report_path(cmd):
+    return Path(cmd[cmd.index("--json-report") + 1])
+
+
+def test_schemalock_retries_once_then_succeeds():
+    """A warm-up failure (nonzero exit, no report) must be retried once; if the
+    second attempt produces a report we return its findings."""
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        if len(calls) == 1:
+            return _FakeCompletedProcess(returncode=1, stderr="connection refused")
+        _json_report_path(cmd).write_text(
+            json.dumps(
+                {
+                    "checks": [
+                        {
+                            "name": "status",
+                            "check_type": "status",
+                            "passed": False,
+                            "endpoint": "GET /escrows/{id}",
+                            "detail": "wrong status code",
+                        }
+                    ]
+                }
+            )
+        )
+        return _FakeCompletedProcess(returncode=0)
+
+    opts = {"config": "schemalock.yaml", "base_url": "http://127.0.0.1:8000"}
+    with patch("subprocess.run", side_effect=fake_run), patch("time.sleep") as fake_sleep:
+        findings = schemalock.run(opts)
+
+    assert len(calls) == 2
+    fake_sleep.assert_called_once_with(schemalock.RETRY_DELAY_SECONDS)
+    assert len(findings) == 1
+    assert findings[0].rule_id == "CONTRACT-STATUS"
+
+
+def test_schemalock_raises_when_both_attempts_fail():
+    """If retry also fails (connection-refused both times, no report), raise
+    AdapterError and surface the last run's stderr for diagnosis."""
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        return _FakeCompletedProcess(returncode=1, stderr="connection refused")
+
+    opts = {"config": "schemalock.yaml", "base_url": "http://127.0.0.1:8000"}
+    with patch("subprocess.run", side_effect=fake_run), patch("time.sleep") as fake_sleep:
+        with pytest.raises(AdapterError, match="no report produced.*connection refused"):
+            schemalock.run(opts)
+
+    assert len(calls) == 2
+    fake_sleep.assert_called_once()
+
+
+def test_schemalock_does_not_retry_when_binary_missing():
+    """FileNotFoundError means the tool can never run — retry would be wasted."""
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        raise FileNotFoundError("no schemalock binary")
+
+    opts = {"config": "schemalock.yaml", "base_url": "http://127.0.0.1:8000"}
+    with patch("subprocess.run", side_effect=fake_run), patch("time.sleep") as fake_sleep:
+        with pytest.raises(AdapterError, match="CLI not found"):
+            schemalock.run(opts)
+
+    assert len(calls) == 1
+    fake_sleep.assert_not_called()
