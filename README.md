@@ -22,8 +22,21 @@ adapter, GitHub Action, PR comment bot, docs site, dogfooding.
 
 ## Install
 
+Dependency versions are pinned for reproducible installs (see
+`requirements.in` / `requirements-dev.in` for the source requirements and
+`requirements.txt` / `requirements-dev.txt` for the compiled lockfiles):
+
 ```bash
-pip install -e ".[dev]"
+pip install -r requirements-dev.txt
+pip install -e .
+```
+
+Lockfiles are generated with `uv pip compile` (pip-tools style); to refresh
+them after editing the `.in` files:
+
+```bash
+uv pip compile requirements.in -o requirements.txt
+uv pip compile requirements-dev.in -o requirements-dev.txt
 ```
 
 ## Quick start
@@ -40,7 +53,8 @@ Exit code is `0` if every enabled tool's findings stay below the configured
 ## Run tests
 
 ```bash
-pip install -e ".[dev]"
+pip install -r requirements-dev.txt
+pip install -e .
 pytest
 ```
 
