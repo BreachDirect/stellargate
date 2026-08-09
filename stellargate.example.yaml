@@ -11,7 +11,15 @@ tools:
   schemalock:
     enabled: true
     config: ./schemalock.yaml
-    base_url: http://127.0.0.1:8000
+    # Single URL (legacy) — findings are tagged with this URL:
+    #   base_url: http://127.0.0.1:8000
+    # OR run the same contract checks against multiple environments; each URL
+    # is tested once and findings are labelled by environment:
+    base_urls:
+      staging: http://127.0.0.1:8000
+      prod: https://api.example.com
+    # base_urls may also be a plain list of URLs; then each URL is used as its
+    # own environment label (e.g. ["http://a:8000", "http://b:8000"]).
 
   vaultsweep:
     enabled: true
