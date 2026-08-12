@@ -1,4 +1,5 @@
 """Runs enabled adapters and collects all findings."""
+
 from __future__ import annotations
 
 from stellargate.adapters import rytscan, schemalock, shieldscan, vaultsweep
@@ -33,7 +34,7 @@ def run_all(config: Config) -> list[ToolRunResult]:
             results.append(ToolRunResult(name, findings, None))
         except AdapterError as e:
             results.append(ToolRunResult(name, None, str(e)))
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - a buggy adapter must surface, not crash the run
             # An adapter bug or unforeseen tool-output shape must not take
             # down the whole run — every other tool's findings still belong
             # in the report. Surface this as a clearly-labeled tool error

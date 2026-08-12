@@ -1,4 +1,5 @@
 """Load and validate stellargate.yaml."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -28,7 +29,7 @@ class Config:
     tools: dict[str, ToolConfig]
 
     @staticmethod
-    def load(path: str | Path) -> "Config":
+    def load(path: str | Path) -> Config:
         path = Path(path)
         if not path.exists():
             raise ConfigError(f"Config file not found: {path}")
@@ -42,16 +43,13 @@ class Config:
         target = raw.get("target", ".")
         fail_on = raw.get("fail_on", "high").lower()
         if fail_on not in VALID_SEVERITIES:
-            raise ConfigError(
-                f"Invalid fail_on '{fail_on}'; must be one of {VALID_SEVERITIES}"
-            )
+            raise ConfigError(f"Invalid fail_on '{fail_on}'; must be one of {VALID_SEVERITIES}")
 
         raw_tools = raw.get("tools", {})
         unknown = set(raw_tools) - set(KNOWN_TOOLS)
         if unknown:
             raise ConfigError(
-                f"Unknown tool(s) in config: {sorted(unknown)}; "
-                f"known tools are {KNOWN_TOOLS}"
+                f"Unknown tool(s) in config: {sorted(unknown)}; " f"known tools are {KNOWN_TOOLS}"
             )
 
         tools: dict[str, ToolConfig] = {}

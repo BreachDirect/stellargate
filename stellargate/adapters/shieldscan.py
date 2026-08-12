@@ -11,6 +11,7 @@ This stub exists so the aggregator can reference `shieldscan` in config
 without a KeyError, and so config validation clearly rejects `enabled: true`
 until Phase 2 lands.
 """
+
 from __future__ import annotations
 
 from stellargate.schema import AdapterError, Finding

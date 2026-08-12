@@ -7,6 +7,7 @@ RytScan's own rule IDs (AUTH-001, PANIC-*, TOKEN-*, EVENT-001, TTL-*, STORE-*)
 are passed straight through as our rule_id — no remapping needed, they're
 already namespaced and human-readable.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -54,11 +55,18 @@ def run(options: dict) -> list[Finding]:
 
 def _scan_cli(path: str) -> list[Finding]:
     cmd = [
-        "cargo", "run", "-p", "rytscan-cli", "--",
-        "scan", path, "--format", "json",
+        "cargo",
+        "run",
+        "-p",
+        "rytscan-cli",
+        "--",
+        "scan",
+        path,
+        "--format",
+        "json",
     ]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, check=False)
     except FileNotFoundError as e:
         raise AdapterError(
             f"{TOOL_NAME}: 'cargo' not found — is the Rust toolchain installed? ({e})"

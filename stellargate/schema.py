@@ -1,8 +1,9 @@
 """Unified finding schema every adapter normalizes into."""
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field, asdict
-from typing import Any, Optional
+from dataclasses import asdict, dataclass, field
+from typing import Any
 
 SEVERITY_ORDER = {"critical": 3, "high": 2, "medium": 1, "low": 0}
 
@@ -13,7 +14,7 @@ class Finding:
     rule_id: str
     severity: str
     message: str
-    location: Optional[str] = None
+    location: str | None = None
     raw: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
