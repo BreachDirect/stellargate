@@ -59,12 +59,27 @@ def main(argv: list[str] | None = None) -> int:
     run_parser.add_argument("--md-report", default=None, help="Write Markdown report to this path")
     run_parser.add_argument("--fail-on", default=None, help="Override fail_on threshold from config")
 
+    validate_parser = subparsers.add_parser(
+        "validate-config",
+        help="Parse and validate the config without running any scan",
+        epilog=(
+            "exit codes:\n"
+            "  0  valid - the config parses and at least one tool is enabled\n"
+            "  2  error - configuration or argument error (config missing or "
+            "unparsable, invalid fail_on, unknown tool, no enabled tool, etc.)"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    validate_parser.add_argument("--config", default="stellargate.yaml")
+
     args = parser.parse_args(argv)
 
     _configure_logging(_resolve_level(args))
 
     if args.command == "run":
         return _run(args)
+    if args.command == "validate-config":
+        return _validate_config(args)
     return 1
 
 
@@ -118,6 +133,20 @@ def _run(args: argparse.Namespace) -> int:
             f.write(to_markdown(results, fail_on, passed))
 
     return 0 if passed else 1
+
+
+def _validate_config(args: argparse.Namespace) -> int:
+    try:
+        config = Config.load(args.config)
+    except ConfigError as e:
+        logger.error("Config error: %s", e)
+        return 2
+
+    enabled = [name for name, tc in config.tools.items() if tc.enabled]
+    for name, tc in config.tools.items():
+        print(f"Tool {name}: {'enabled' if tc.enabled else 'disabled'}")
+    print(f"Config ok: {len(enabled)} tool(s) enabled: {', '.join(enabled)}")
+    return 0
 
 
 if __name__ == "__main__":
