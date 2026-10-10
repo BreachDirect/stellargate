@@ -2,12 +2,45 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any
 
 from stellargate.aggregator import ToolRunResult
 from stellargate.schema import SEVERITY_ORDER, Finding
 
 
-def to_json(results: list[ToolRunResult], fail_on: str, gate_passed: bool) -> dict:
+def finding_key(finding: "Finding | dict[str, Any]") -> tuple:
+    """Uniqueness key for a finding: (tool, rule_id, location).
+
+    Accepts either a live Finding object or a dict as produced by
+    Finding.to_dict() (i.e. entries inside the JSON report's "findings"
+    list), so the same key works for diffing current results against a
+    previously serialized baseline report.
+    """
+    if isinstance(finding, Finding):
+        return (finding.tool, finding.rule_id, finding.location)
+    return (finding["tool"], finding["rule_id"], finding.get("location"))
+
+
+def diff_findings(
+    current: list[Finding], baseline_report: dict[str, Any]
+) -> list[Finding]:
+    """Return only findings newly introduced since a baseline report.
+
+    A finding is considered pre-existing if its (tool, rule_id, location)
+    key already appears in the baseline report's "findings" list. Only
+    brand-new findings are returned — this is what makes gating on
+    regressions possible without penalizing every historical finding.
+    """
+    baseline_keys = {finding_key(f) for f in baseline_report.get("findings", [])}
+    return [f for f in current if finding_key(f) not in baseline_keys]
+
+
+def to_json(
+    results: list[ToolRunResult],
+    fail_on: str,
+    gate_passed: bool,
+    diff_mode: bool = False,
+) -> dict:
     findings = [f for r in results for f in r.findings]
     counts = {sev: 0 for sev in SEVERITY_ORDER}
     for f in findings:
@@ -16,6 +49,7 @@ def to_json(results: list[ToolRunResult], fail_on: str, gate_passed: bool) -> di
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "fail_on": fail_on,
+        "diff": bool(diff_mode),
         "passed": gate_passed,
         "summary": counts,
         "tools": [
@@ -30,12 +64,18 @@ def to_json(results: list[ToolRunResult], fail_on: str, gate_passed: bool) -> di
     }
 
 
-def to_markdown(results: list[ToolRunResult], fail_on: str, gate_passed: bool) -> str:
+def to_markdown(
+    results: list[ToolRunResult],
+    fail_on: str,
+    gate_passed: bool,
+    diff_mode: bool = False,
+) -> str:
     findings = [f for r in results for f in r.findings]
     lines: list[str] = []
 
     status = "✅ PASSED" if gate_passed else "❌ FAILED"
-    lines.append(f"# StellarGate Compliance Report — {status}\n")
+    mode_label = " — diff mode (only new findings vs baseline)" if diff_mode else ""
+    lines.append(f"# StellarGate Compliance Report — {status}{mode_label}\n")
     lines.append(f"Threshold: fail on **{fail_on}** or above.\n")
 
     lines.append("## Per-tool summary\n")
