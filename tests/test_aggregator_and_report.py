@@ -1,9 +1,10 @@
-from unittest.mock import patch
+from unittest.mock import mock_open, patch
 
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from stellargate.aggregator import ToolRunResult, all_findings, run_all
+from stellargate.cli import _run
 from stellargate.config import Config, ToolConfig
 from stellargate.report import gate_passed, to_json, to_markdown
 from stellargate.schema import SEVERITY_ORDER, Finding
@@ -61,6 +62,86 @@ def test_to_markdown_shows_failed_status_and_tool_error():
     assert "schemalock CLI not found" in md
     assert "AUTH-001" in md
     assert "STELLAR-001" in md
+
+
+def test_to_sarif_has_schema_version_and_runs():
+    results = make_results()
+    sarif = to_sarif(results, "high", False)
+    assert sarif["$schema"] == "https://json.schemastore.org/sarif-2.1.0.json"
+    assert sarif["version"] == "2.1.0"
+    assert isinstance(sarif["runs"], list) and len(sarif["runs"]) == 1
+    driver = sarif["runs"][0]["tool"]["driver"]
+    assert driver["name"] == "stellargate"
+    assert driver["version"] == "0.1.0"
+
+
+def test_to_sarif_severity_level_mapping():
+    findings = [
+        Finding("t", "R1", "critical", "m"),
+        Finding("t", "R2", "high", "m"),
+        Finding("t", "R3", "medium", "m"),
+        Finding("t", "R4", "low", "m"),
+    ]
+    sarif = to_sarif(
+        [ToolRunResult("t", findings, None)], "high", False
+    )
+    levels = [
+        SEVERITY_TO_LEVEL[f.severity]
+        for f in findings
+    ]
+    assert levels == ["error", "error", "warning", "note"]
+    result_levels = [r["level"] for r in sarif["runs"][0]["results"]]
+    assert result_levels == levels
+
+
+def test_to_sarif_creates_one_result_per_finding_with_ruleid_and_location():
+    results = make_results()
+    sarif = to_sarif(results, "high", False)
+    sarif_results = sarif["runs"][0]["results"]
+    assert len(sarif_results) == 2
+    assert [r["ruleId"] for r in sarif_results] == ["AUTH-001", "STELLAR-001"]
+    auth = [r for r in sarif_results if r["ruleId"] == "AUTH-001"][0]
+    uri = auth["locations"][0]["physicalLocation"]["artifactLocation"]["uri"]
+    assert uri == "vault.rs:42"
+
+
+def test_to_sarif_empty_findings_yields_empty_results():
+    sarif = to_sarif([ToolRunResult("t", [], None)], "high", True)
+    assert sarif["runs"][0]["results"] == []
+    assert "rules" not in sarif["runs"][0]["tool"]["driver"]
+
+
+def test_cli_writes_sarif_report_file():
+    from types import SimpleNamespace
+
+    args = SimpleNamespace(
+        config="stellargate.example.yaml",
+        fail_on=None,
+        json_report=None,
+        sarif_report="build/report.sarif",
+        md_report=None,
+    )
+    config = Config(
+        target=".",
+        fail_on="high",
+        tools={},
+    )
+    with patch("stellargate.cli.Config.load", return_value=config), patch(
+        "stellargate.cli.run_all", return_value=make_results()
+    ) as mock_run_all, patch(
+        "stellargate.cli.gate_passed", return_value=False
+    ), patch("builtins.open", mock_open()) as mock_file:
+        _run(args)
+    mock_run_all.assert_called_once()
+    handle = mock_file()
+    written = "".join(call.args[0] for call in handle.write.call_args_list)
+    import json
+
+    data = json.loads(written)
+    assert data["$schema"].endswith("sarif-2.1.0.json")
+    assert data["version"] == "2.1.0"
+    assert len(data["runs"]) == 1
+    assert data["runs"][0]["tool"]["driver"]["name"] == "stellargate"
 
 
 def test_run_all_survives_an_unexpected_adapter_exception():
