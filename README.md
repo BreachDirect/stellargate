@@ -50,6 +50,30 @@ stellargate run --config stellargate.yaml --json-report report.json
 Exit code is `0` if every enabled tool's findings stay below the configured
 `fail_on` threshold, `1` otherwise — drop it into any CI step.
 
+## Editor configuration assistance
+
+The [JSON Schema](stellargate.schema.json) describes `stellargate.yaml` for
+editor completion and structural validation. The example already includes a
+YAML language-server directive. If your config lives elsewhere, point it at
+the schema's actual relative path or the upstream URL:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/BreachDirect/stellargate/main/stellargate.schema.json
+```
+
+With the VS Code YAML extension, opening the example offers known tool names,
+options and value types. Unknown tool names and configurations without an
+explicitly enabled tool are rejected. `fail_on` is case insensitive, as in the
+loader. Extra top-level and adapter options remain allowed because the loader
+allows them; this is not a strict typo checker for every option.
+
+Use YAML booleans (`true`/`false`), not strings such as `"false"`; the schema
+rejects strings even though the loader currently coerces them with `bool()`.
+Editor validation does not replace a run: it cannot check that a file exists,
+that a service is reachable, or that tools are installed. SchemaLock needs its
+`config` path when invoked; ShieldScan remains an unimplemented Phase 2 adapter.
+No schema validation dependency is added to the CLI's runtime.
+
 ## Run tests
 
 ```bash

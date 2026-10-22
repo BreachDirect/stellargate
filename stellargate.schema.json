@@ -1,0 +1,210 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/BreachDirect/stellargate/main/stellargate.schema.json",
+  "title": "StellarGate configuration",
+  "description": "Editor assistance for stellargate.yaml. Does not run adapters or check paths, credentials, URLs or tool availability.",
+  "type": "object",
+  "required": [
+    "tools"
+  ],
+  "properties": {
+    "target": {
+      "type": "string",
+      "default": ".",
+      "description": "Project target; individual adapters use their own path option."
+    },
+    "fail_on": {
+      "type": "string",
+      "default": "high",
+      "pattern": "^([Cc][Rr][Ii][Tt][Ii][Cc][Aa][Ll]|[Hh][Ii][Gg][Hh]|[Mm][Ee][Dd][Ii][Uu][Mm]|[Ll][Oo][Ww])$",
+      "examples": [
+        "critical",
+        "high",
+        "medium",
+        "low"
+      ],
+      "description": "Failure threshold, case insensitive."
+    },
+    "tools": {
+      "type": "object",
+      "properties": {
+        "rytscan": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "path": {
+                  "type": "string",
+                  "default": "."
+                },
+                "cache_file": {
+                  "type": "string",
+                  "description": "Cache file override; the default is .stellargate/rytscan-cache.json."
+                }
+              },
+              "additionalProperties": true
+            },
+            {
+              "type": "null",
+              "description": "Equivalent to a disabled tool."
+            }
+          ]
+        },
+        "schemalock": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "config": {
+                  "type": "string",
+                  "description": "SchemaLock config path; required by the adapter when running."
+                },
+                "base_url": {
+                  "type": "string",
+                  "default": "http://127.0.0.1:8000"
+                }
+              },
+              "additionalProperties": true
+            },
+            {
+              "type": "null",
+              "description": "Equivalent to a disabled tool."
+            }
+          ]
+        },
+        "vaultsweep": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "path": {
+                  "type": "string",
+                  "default": "."
+                },
+                "ignore_paths": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "fnmatch patterns for paths to ignore."
+                }
+              },
+              "additionalProperties": true
+            },
+            {
+              "type": "null",
+              "description": "Equivalent to a disabled tool."
+            }
+          ]
+        },
+        "shieldscan": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": false
+                }
+              },
+              "additionalProperties": true,
+              "description": "Phase 2 placeholder: enabling this passes config loading but the adapter is not implemented."
+            },
+            {
+              "type": "null",
+              "description": "Equivalent to a disabled tool."
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "rytscan"
+          ],
+          "properties": {
+            "rytscan": {
+              "type": "object",
+              "required": [
+                "enabled"
+              ],
+              "properties": {
+                "enabled": {
+                  "const": true
+                }
+              }
+            }
+          }
+        },
+        {
+          "required": [
+            "schemalock"
+          ],
+          "properties": {
+            "schemalock": {
+              "type": "object",
+              "required": [
+                "enabled"
+              ],
+              "properties": {
+                "enabled": {
+                  "const": true
+                }
+              }
+            }
+          }
+        },
+        {
+          "required": [
+            "vaultsweep"
+          ],
+          "properties": {
+            "vaultsweep": {
+              "type": "object",
+              "required": [
+                "enabled"
+              ],
+              "properties": {
+                "enabled": {
+                  "const": true
+                }
+              }
+            }
+          }
+        },
+        {
+          "required": [
+            "shieldscan"
+          ],
+          "properties": {
+            "shieldscan": {
+              "type": "object",
+              "required": [
+                "enabled"
+              ],
+              "properties": {
+                "enabled": {
+                  "const": true
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "additionalProperties": true
+}

@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=./stellargate.schema.json
 # Example StellarGate config. Copy to stellargate.yaml and adjust paths.
 
 target: .
